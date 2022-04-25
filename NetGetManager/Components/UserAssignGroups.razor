@@ -1,0 +1,75 @@
+﻿@inject PropertiesService PropertiesService
+@inject RefreshService RefreshService
+@inject CrudService CrudService
+
+<MudTable Items="PropertiesService.Groups" Elevation="2" Breakpoint="Breakpoint.None" Height="calc(100vh - 200px - 26em)" Hover="true" FixedHeader="true" MultiSelection="true" Filter="new Func<GroupModel, bool>(CallFilterFunc)" @bind-SelectedItems="selectedGroups">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Gruppen zuweisen</MudText>
+        <MudSpacer />
+        <MudTextField Immediate @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentColor="Color.Primary" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </ToolBarContent>
+    <ColGroup>
+        <col style="width:10%;" />
+        <col />
+    </ColGroup>
+    <HeaderContent>
+        <MudTh>Gruppe</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+
+    HashSet<GroupModel> _selectedGroups = new HashSet<GroupModel>();
+    HashSet<GroupModel> selectedGroups
+    {
+        get
+        {
+            return _selectedGroups;
+        }
+        set
+        {
+            _selectedGroups = value;
+            AssignGroupsToUser();
+        }
+    }
+
+    private string searchString;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        RefreshService.UserDetailsRefreshRequested += async () => await Refresh();
+        await Refresh();
+    }
+    private async Task Refresh()
+    {
+        HashSet<GroupModel> userAssignedGroups = new();
+        List<string> userAssignedGroupNames = await CrudService.ReadUserGroupPrivileges(PropertiesService.SelectedUser);
+        foreach(string groupName in userAssignedGroupNames)
+        {
+            userAssignedGroups.Add(new GroupModel(groupName));
+        }
+        _selectedGroups = userAssignedGroups;
+        StateHasChanged();
+    }
+    private bool CallFilterFunc(GroupModel group) => FilterFunc(group, searchString);
+    private bool FilterFunc(GroupModel group, string searchString)
+    {
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (group.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+    private async void AssignGroupsToUser()
+    {
+        List<string> groupNames = new();
+        foreach(GroupModel group in selectedGroups)
+        {
+            groupNames.Add(group.Name);
+        }
+        await CrudService.CreateUserGroupPriviliges(groupNames, PropertiesService.SelectedUser);
+    }
+}

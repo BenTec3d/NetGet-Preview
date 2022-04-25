@@ -1,0 +1,146 @@
+﻿@inject RefreshService RefreshService
+@inject PropertiesService PropertiesService
+@inject CrudService CrudService
+
+@if (PropertiesService.SelectedAvailableContent is not null)
+{
+    @if (PropertiesService.SelectedAvailableContent.Type == "winget")
+    {
+        <MudTextField ReadOnly Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Name" Value="PropertiesService.SelectedAvailableContent.Name"></MudTextField>
+        <MudTextField ReadOnly Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Publisher" Value="PropertiesService.SelectedAvailableContent.Publisher"></MudTextField>
+        <MudSelect @bind-Value="version" Class="mt-0 mb-0" Variant="Variant.Outlined" Label="Version" T="string">
+            @if (wingetVersions is not null)
+            {
+                <MudSelectItem T="string" Value="null">Aktuellste Version</MudSelectItem>
+                @foreach (string version in wingetVersions)
+                {
+                    <MudSelectItem Value="version"></MudSelectItem>
+                }
+            }
+        </MudSelect>
+        <MudTextField Immediate Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Anweisungen" Lines="8" @bind-Value="instructions"></MudTextField>
+    }
+    else if (PropertiesService.SelectedAvailableContent.Type == "download")
+    {
+        <MudTextField ReadOnly Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Name" Value="PropertiesService.SelectedAvailableContent.Name"></MudTextField>
+        <MudTextField ReadOnly Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Nutzer" Value="PropertiesService.SelectedAvailableContent.User"></MudTextField>
+        <MudTextField ReadOnly Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Url" Value="PropertiesService.SelectedAvailableContent.Url"></MudTextField>
+        <MudTextField ReadOnly="@(Type == "template")" Immediate Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Anweisungen" Lines="8" @bind-Value="instructions"></MudTextField>
+    }
+    <MudPaper Class="mx-auto" Width="60%" Elevation="0">
+        <MudButton Disabled="!PermissionToModify" FullWidth Color="Color.Primary" Variant="Variant.Filled" OnClick="() => AddContent()">Inhalt Hinzufügen</MudButton>
+    </MudPaper>
+}
+
+@code {
+    [CascadingParameter(Name = "Index")]
+    public string Index { get; set; }
+
+    [CascadingParameter(Name = "Type")]
+    public string Type { get; set; }
+
+    [CascadingParameter(Name = "User")]
+    public string User { get; set; }
+
+    [CascadingParameter(Name = "PermissionToModify")]
+    public bool PermissionToModify { get; set; }
+
+    private string _instructions;
+    private string instructions
+    {
+        get
+        {
+            if (String.IsNullOrEmpty(_instructions))
+                return null;
+            else
+                return _instructions;
+        }
+        set
+        {
+            _instructions = value;
+        }
+    }
+    private string version;
+    private List<string> wingetVersions;
+
+    protected override async Task OnInitializedAsync()
+    {
+        RefreshService.AvailableContentDetailsRefreshRequested += async () => await Refresh();
+        await Refresh();
+    }
+    private async Task Refresh()
+    {
+        if (PropertiesService.SelectedAvailableContent.Type == "winget")
+            wingetVersions = await CrudService.ReadWingetVersions(PropertiesService.SelectedAvailableContent);
+
+        instructions = PropertiesService.SelectedAvailableContent.Instructions;
+        StateHasChanged();
+    }
+    private async Task AddContent()
+    {
+        if (Type == "group")
+        {
+            await AddToGroup();
+        }
+        else if (Type == "template")
+        {
+            await AddToTemplate();
+        }
+    }
+    private async Task AddToGroup()
+    {
+
+        ContentModel content = new();
+        content.Type = PropertiesService.SelectedAvailableContent.Type;
+        content.Name = PropertiesService.SelectedAvailableContent.Name;
+        content.User =  PropertiesService.SelectedAvailableContent.User;
+        if (PropertiesService.SelectedAvailableContent.Type == "winget")
+            content.User = User;
+        content.Publisher = PropertiesService.SelectedAvailableContent.Publisher;
+        content.Version = version;
+        if(PropertiesService.SelectedAvailableContent.Type == "winget")
+            content.Command = PropertiesService.SelectedAvailableContent.Id;
+        content.Url = PropertiesService.SelectedAvailableContent.Url;
+        content.Instructions = instructions;
+        await CrudService.AddContentToGroup(content, PropertiesService.Groups.ElementAt(int.Parse(Index)));
+
+        await PropertiesService.RefreshGroups();
+        PropertiesService.ClearSelection();
+        RefreshService.CallViewRefreshRequested();
+        RefreshService.CallAvailableContentTableRefreshRequested();
+        RefreshService.CallContentTableRefreshRequested();
+    }
+    private async Task AddToTemplate()
+    {
+        TemplateModel template = PropertiesService.Templates.ElementAt(int.Parse(Index));
+
+        if (PropertiesService.SelectedAvailableContent.Type == "winget")
+        {
+            ContentModel content = new();
+            content.Type = "winget";
+            content.User = User;
+            content.Name = PropertiesService.SelectedAvailableContent.Name;
+            content.Publisher = PropertiesService.SelectedAvailableContent.Publisher;
+            content.Command = PropertiesService.SelectedAvailableContent.Id;
+            content.Version = version;
+            content.Instructions = instructions;
+            await CrudService.AddWingetToTemplate(content, template);
+        }
+        else if (PropertiesService.SelectedAvailableContent.Type == "download")
+        {
+            if (PropertiesService.SelectedAvailableContent.User == User)
+            {
+                await CrudService.AddUserDownloadToTemplate(PropertiesService.SelectedAvailableContent, template);
+            }
+            else if (PropertiesService.SelectedAvailableContent.User == PropertiesService.RootName)
+            {
+                await CrudService.AddRootDownloadToTemplate(PropertiesService.SelectedAvailableContent, template);
+            }
+        }
+        await PropertiesService.RefreshTemplates();
+        PropertiesService.ClearSelection();
+        RefreshService.CallViewRefreshRequested();
+        RefreshService.CallAvailableContentTableRefreshRequested();
+        RefreshService.CallContentTableRefreshRequested();
+    }
+}

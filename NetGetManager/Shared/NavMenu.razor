@@ -1,0 +1,26 @@
+﻿@inject RefreshService RefreshService
+@inject DataAccessMySQL DataAccess
+@inject PropertiesService PropertiesService
+
+@if (PropertiesService.ThisUser is not null)
+{
+    @if (PropertiesService.ThisUser.Type == "root" || PropertiesService.ThisUser.Type == "admin")
+    {
+        <ElevatedNavMenu />
+    }
+    else
+    {
+        <DefaultNavMenu />
+    }
+}
+
+@code{
+    protected override void OnInitialized()
+    {
+        RefreshService.NavMenuRefreshRequested += () => Refresh();
+    }
+    private void Refresh()
+    {
+        StateHasChanged();
+    }
+}

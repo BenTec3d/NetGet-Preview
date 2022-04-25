@@ -1,0 +1,59 @@
+﻿@inject RefreshService RefreshService
+@inject DataAccessMySQL DataAccess
+@inject PropertiesService PropertiesService
+@inject NavigationManager NavigationManager
+@inject IconColorService IconColorService
+
+<MudNavMenu DisableRipple Rounded Class="pa-2" Margin="Margin.Dense">
+    @*GROUPS*@
+    <MudNavGroup DisableRipple Icon="@IconColorService.GetFolderIcon(templatesExpanded)" IconColor="@GetIconColor("/group/", false)" Title="Gruppen" @bind-Expanded="@groupsExpanded">
+        @foreach (GroupModel group in PropertiesService.Groups)
+        {
+            <MudNavLink DisableRipple Icon="@Icons.Filled.Groups" IconColor="@GetIconColor($"/group/{group.Name}", true)" Href="@($"/group/{group.Name}")" Match="NavLinkMatch.All">@group.Name</MudNavLink>
+        }
+    </MudNavGroup>
+
+    @*TEMPLATES*@
+    <MudNavGroup DisableRipple Icon="@IconColorService.GetFolderIcon(templatesExpanded)" IconColor="@GetIconColor("/template/", false)" Title="Vorlagen" @bind-Expanded="@templatesExpanded">
+        @*Templates from ThisUser*@
+        @foreach (TemplateModel template in PropertiesService.Templates.Where(x => x.User == PropertiesService.ThisUser.Name))
+        {
+            <MudNavLink DisableRipple Icon="@Icons.Outlined.FeaturedPlayList" IconColor="@GetIconColor($"/template/{PropertiesService.ThisUser.Name}/{PropertiesService.Templates.IndexOf(template)}", true)" Href="@($"/template/{PropertiesService.ThisUser.Name}/{PropertiesService.Templates.IndexOf(template)}")" Match="NavLinkMatch.All">@template.Name</MudNavLink>
+        }
+        @*Create template button*@
+        <MudNavLink DisableRipple Icon="@Icons.Filled.AddCircleOutline" IconColor="@GetIconColor($"/template/{PropertiesService.ThisUser.Name}/create")" Href="@($"/template/{PropertiesService.ThisUser.Name}/create")" Match="NavLinkMatch.All">Erstellen</MudNavLink>
+        <MudDivider />
+        @*Templates from all but ThisUser*@
+        @foreach (TemplateModel template in PropertiesService.Templates.Where(x => x.User != PropertiesService.ThisUser.Name))
+        {
+            <MudNavLink DisableRipple Icon="@Icons.Outlined.FeaturedPlayList" IconColor="@GetIconColor($"/template/{template.User}/{PropertiesService.Templates.IndexOf(template)}", true)" Href="@($"/template/{template.User}/{PropertiesService.Templates.IndexOf(template)}")" Match="NavLinkMatch.All">@template.Name</MudNavLink>
+        }
+    </MudNavGroup>
+
+    @*DOWNLOADS*@
+    <MudNavLink DisableRipple Icon="@Icons.Rounded.Download" IconColor="@GetIconColor($"/downloads/")" Href="@($"/downloads/")">Downloads</MudNavLink>
+
+</MudNavMenu>
+
+@code
+{
+    private bool groupsExpanded;
+    private bool templatesExpanded;
+
+    protected override void OnInitialized()
+    {
+        RefreshService.NavMenuRefreshRequested += () => Refresh();
+    }
+    private MudBlazor.Color GetIconColor(string href, bool exactMatch)
+    {
+        return IconColorService.GetIconColor(href, NavigationManager.Uri, exactMatch);
+    }
+    private MudBlazor.Color GetIconColor(string href)
+    {
+        return IconColorService.GetIconColor(href, NavigationManager.Uri);
+    }
+    private void Refresh()
+    {
+        StateHasChanged();
+    }
+}

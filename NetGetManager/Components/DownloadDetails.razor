@@ -1,0 +1,131 @@
+﻿@inject RefreshService RefreshService
+@inject PropertiesService PropertiesService
+@inject CrudService CrudService
+
+@if (PropertiesService.SelectedContent is not null)
+{
+    <MudForm @bind-IsValid="@valid">
+        <MudTextField Disabled ReadOnly Class="mt-4 ml-4 mr-4 mb-4" Label="User" Variant="Variant.Outlined" @bind-Value="user" />
+        <MudTextField Disabled="!permissionToModify" Immediate Class="ml-4 mr-4 mb-4" Label="Name" Variant="Variant.Outlined" Required MaxLength="50" @bind-Value="name" />
+        <MudTextField Disabled="!permissionToModify" Immediate Class="ml-4 mr-4 mb-4" Label="Url" Variant="Variant.Outlined" Required @bind-Value="url" />
+        <MudTextField Disabled="!permissionToModify" Immediate Class="ml-4 mr-4 mb-4" Label="Anweisungen" Variant="Variant.Outlined" Lines="8" @bind-Value="instructions" T="string" />
+    </MudForm>
+    @if (permissionToModify)
+    {
+        <MudItem Class="d-flex ml-4 mr-4 mb-4 justify-space-between">
+            <MudPaper Elevation="0" Width="25%">
+                <MudButton Disabled="!modified || !valid" FullWidth StartIcon="@Icons.Filled.Edit" IconColor="Color.Dark" Color="Color.Primary" Variant="Variant.Filled" OnClick="() => UpdateDownload()">Übernehmen</MudButton>
+            </MudPaper>
+            <MudPaper Elevation="0" Width="25%">
+                <MudButton Disabled="!modified || !valid" FullWidth StartIcon="@Icons.Filled.Undo" IconColor="Color.Dark" Color="Color.Default" Variant="Variant.Filled" OnClick="() => InitiliazeValues()">Verwerfen</MudButton>
+            </MudPaper>
+            <MudPaper Elevation="0" Width="25%">
+                <MudButton Disabled="!permissionToModify" FullWidth StartIcon="@Icons.Filled.DeleteForever" IconColor="Color.Dark" Color="Color.Error" Variant="Variant.Filled" OnClick="() => DeleteDownload()">Löschen</MudButton>
+            </MudPaper>
+        </MudItem>
+    }
+}
+
+@code {
+    private bool valid;
+    private bool permissionToModify
+    {
+        get
+        {
+            if (PropertiesService.SelectedContent is not null)
+            {
+                if(PropertiesService.ThisUser.Type == "root" || (PropertiesService.ThisUser.Type == "admin" && PropertiesService.Users.Find(x => x.Name == PropertiesService.SelectedContent.User).Type != "admin") || PropertiesService.ThisUser.Name == PropertiesService.SelectedContent.User)
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
+    private string user;
+    private string name;
+    private string url;
+    private string instructions;
+
+    private bool modified
+    {
+        get
+        {
+            if (PropertiesService.SelectedContent is not null)
+            {
+                if (name != PropertiesService.SelectedContent.Name)
+                {
+                    return true;
+                }
+                else if (url != PropertiesService.SelectedContent.Url)
+                {
+                    return true;
+                }
+                else if (instructions != PropertiesService.SelectedContent.Instructions)
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        RefreshService.CallNavMenuRefreshRequested();
+        RefreshService.DownloadDetailsRefreshRequested += () => Refesh();
+        InitiliazeValues();
+    }
+    private void Refesh()
+    {
+        InitiliazeValues();
+        StateHasChanged();
+    }
+    private void InitiliazeValues()
+    {
+        if (PropertiesService.SelectedContent is not null)
+        {
+            user = PropertiesService.SelectedContent.User;
+            name = PropertiesService.SelectedContent.Name;
+            url = PropertiesService.SelectedContent.Url;
+            instructions = PropertiesService.SelectedContent.Instructions;
+        }
+    }
+    private async void UpdateDownload()
+    {
+        ContentModel content = new();
+        content.Type = "download";
+        content.Name = name;
+        content.User = user;
+        content.Url = url;
+        content.Instructions = instructions;
+        await CrudService.UpdateContent(PropertiesService.SelectedContent, content);
+        await PropertiesService.RefreshDownloads();
+        await PropertiesService.RefreshTemplates();
+        PropertiesService.SelectedContent = PropertiesService.Downloads.Find(x => x.User == user && x.Name == name && x.Url == url);
+        RefreshService.CallDownloadsTableRefreshRequested();
+    }
+    private async void DeleteDownload()
+    {
+        await CrudService.DeleteContent(PropertiesService.SelectedContent);
+        await PropertiesService.RefreshDownloads();
+        await PropertiesService.RefreshTemplates();
+        PropertiesService.ClearSelection();
+        RefreshService.CallDownloadsTableRefreshRequested();
+        RefreshService.CallViewRefreshRequested();
+    }
+}

@@ -1,0 +1,88 @@
+﻿@inject PropertiesService PropertiesService
+@inject RefreshService RefreshService
+
+<MudTable Breakpoint="Breakpoint.None" Height="calc(100vh - 200px - 3em)" Hover="true" FixedHeader="true" Items="PropertiesService.Users" Filter="new Func<UserModel, bool>(CallFilterFunc)" RowClassFunc="@SelectedRowClassFunc" @ref="mudTable" @bind-SelectedItem="PropertiesService.SelectedUser">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Nutzer</MudText>
+        <MudSpacer />
+        <MudTextField Immediate @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentColor="Color.Primary" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </ToolBarContent>
+    <ColGroup>
+        <col style="width:65%;" />
+        <col />
+    </ColGroup>
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<UserModel, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<UserModel, object>(x => GetTypeLabel(x.Type))">Zugangsberechtigung</MudTableSortLabel></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+        <MudTd DataLabel="Type">@GetTypeLabel(context.Type)</MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudButton OnClick="ClearSelection" Variant="Variant.Filled" FullWidth="true" Size="Size.Large">Neuer Nutzer</MudButton>
+    </PagerContent>
+</MudTable>
+
+@code {
+    private MudTable<UserModel> mudTable;
+    private string searchString;
+    private int selectedRowNumber = -1;
+
+    protected override void OnInitialized()
+    {
+        RefreshService.UsersTableRefreshRequested += () => Refresh();
+    }
+    private void Refresh()
+    {
+        StateHasChanged();
+    }
+    private bool CallFilterFunc(UserModel user) => FilterFunc(user, searchString);
+    private void ClearSelection()
+    {
+        PropertiesService.ClearSelection();
+        RefreshService.CallViewRefreshRequested();
+    }
+    private bool FilterFunc(UserModel user, string searchString)
+    {
+        {
+            if (string.IsNullOrWhiteSpace(searchString))
+                return true;
+            if (user.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (GetTypeLabel(user.Type).Contains(searchString, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+    private string SelectedRowClassFunc(UserModel user, int rowNumber)
+    {
+        if (mudTable.SelectedItem != null && mudTable.SelectedItem.Equals(user))
+        {
+            selectedRowNumber = rowNumber;
+            RefreshService.CallViewRefreshRequested();
+            RefreshService.CallUserDetailsRefreshRequested();
+            return "selected";
+        }
+        else
+        {
+            return string.Empty;
+        }
+    }
+    private string GetTypeLabel(string type)
+    {
+        switch (type)
+        {
+            case "root":
+                return "Root";
+            case "admin":
+                return "Admin";
+            case "curator":
+                return "Kurator";
+            case "client":
+                return "Client";
+            default:
+                return "Error";
+        }
+    }
+}

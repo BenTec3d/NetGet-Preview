@@ -1,0 +1,199 @@
+﻿@inject RefreshService RefreshService
+@inject PropertiesService PropertiesService
+@inject CrudService CrudService
+
+@if (PropertiesService.SelectedUser is not null)
+{
+    <MudForm @bind-IsValid="@valid">
+        <MudTextField Disabled="@(restricted || PropertiesService.SelectedUser.Type == "root")" Immediate Class="mt-4 ml-4 mr-4 mb-4" Label="Name" Required MaxLength="16" Validation="@(new Func<string, IEnumerable<string>>(NameValidation))" Variant="Variant.Outlined" @bind-Value="name" />
+        <MudTextField Disabled="restricted" Immediate Class="ml-4 mr-4 mb-4" Label="Passwort" Placeholder="@passwordPlaceholder" Validation="@(new Func<string, IEnumerable<string>>(PasswordValidation))" Variant="Variant.Outlined" @bind-Value="password" @ref="passwordField" />
+        <MudSelect Disabled="@(restricted || PropertiesService.SelectedUser.Type == "root")" Required Class="mt-0 ml-4 mr-4 mb-4" Label="Zugangsberechtigung" AnchorOrigin="Origin.BottomCenter" Variant="Variant.Outlined" @bind-Value="typeLabel">
+            @if (PropertiesService.ThisUser.Type == "root")
+            {
+            <MudSelectItem Value="@("Admin")" />
+            }
+        <MudSelectItem Value="@("Kurator")" />
+        <MudSelectItem Value="@("Client")" />
+    </MudSelect>
+</MudForm>
+
+    @if (!restricted)
+    {
+        <MudItem Class="d-flex ml-4 mr-4 mb-4 justify-space-between">
+            <MudPaper Elevation="0" Width="25%">
+                <MudButton Disabled="!modified || !valid" FullWidth StartIcon="@Icons.Filled.Edit" IconColor="Color.Dark" Color="Color.Primary" Variant="Variant.Filled" OnClick="() => UpdateUser()">Übernehmen</MudButton>
+            </MudPaper>
+            <MudPaper Elevation="0" Width="25%">
+                <MudButton Disabled="!modified || !valid" FullWidth StartIcon="@Icons.Filled.Undo" IconColor="Color.Dark" Color="Color.Default" Variant="Variant.Filled" OnClick="() => ResetValues()">Verwerfen</MudButton>
+            </MudPaper>
+            <MudPaper Elevation="0" Width="25%">
+                <MudButton Disabled="@(restricted || PropertiesService.SelectedUser.Type == "root")" FullWidth StartIcon="@Icons.Filled.DeleteForever" IconColor="Color.Dark" Color="Color.Error" Variant="Variant.Filled" OnClick="() => DeleteUser()">Löschen</MudButton>
+            </MudPaper>
+        </MudItem>
+    }
+}
+
+@code {
+    private bool valid;
+    private MudTextField<string> passwordField;
+    private string passwordPlaceholder
+    {
+        get
+        {
+            if (password is null && PropertiesService.SelectedUser is not null)
+            {
+                if (PropertiesService.SelectedUser.Password != "")
+                {
+                    return "Passwort vorhanden";
+                }
+                else
+                {
+                    return "Passwort setzen empfohlen";
+                }
+            }
+            else
+            {
+                return "";
+            }
+        }
+    }
+    private bool restricted
+    {
+        get
+        {
+            if (PropertiesService.SelectedUser is not null)
+            {
+                if (PropertiesService.ThisUser.Type != "root" && ((PropertiesService.SelectedUser.Type == "root" || PropertiesService.SelectedUser.Type == "admin") && PropertiesService.ThisUser.Name != PropertiesService.SelectedUser.Name))
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
+    private string name;
+    private string password;
+    private string type;
+    private string typeLabel
+    {
+        get
+        {
+            switch (type)
+            {
+                case "root":
+                    return "Root";
+                case "admin":
+                    return "Admin";
+                case "curator":
+                    return "Kurator";
+                case "client":
+                    return "Client";
+                default:
+                    return "Error";
+            }
+        }
+        set
+        {
+            switch (value)
+            {
+                case "Root":
+                    type = "root";
+                    break;
+                case "Admin":
+                    type = "admin";
+                    break;
+                case "Kurator":
+                    type = "curator";
+                    break;
+                case "Client":
+                    type = "client";
+                    break;
+            }
+        }
+    }
+    private bool modified
+    {
+        get
+        {
+            if (PropertiesService.SelectedUser is not null)
+            {
+                if (name != PropertiesService.SelectedUser.Name)
+                {
+                    return true;
+                }
+                else if (password is not null)
+                {
+                    return true;
+                }
+                else if (type != PropertiesService.SelectedUser.Type)
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        RefreshService.CallNavMenuRefreshRequested();
+        RefreshService.UserDetailsRefreshRequested += () => Refesh();
+        passwordField = new();
+        InitiliazeValues();
+    }
+    private void Refesh()
+    {
+        ResetValues();
+        StateHasChanged();
+    }
+    private void InitiliazeValues()
+    {
+        password = null;
+        name = PropertiesService.SelectedUser.Name;
+        type = PropertiesService.SelectedUser.Type;
+    }
+    private void ResetValues()
+    {
+        InitiliazeValues();
+        passwordField.Validate();
+    }
+    private async void UpdateUser()
+    {
+        await CrudService.UpdateUser(PropertiesService.SelectedUser, name, password, type, PropertiesService.RootName);
+        await PropertiesService.RefreshUsers();
+        PropertiesService.SelectedUser = PropertiesService.Users.Find(x => x.Name == name);
+        RefreshService.CallUsersTableRefreshRequested();
+    }
+    private async void DeleteUser()
+    {
+        await CrudService.DeleteUser(PropertiesService.SelectedUser);
+        await PropertiesService.RefreshUsers();
+        PropertiesService.ClearSelection();
+        RefreshService.CallUsersTableRefreshRequested();
+        RefreshService.CallViewRefreshRequested();
+    }
+    private IEnumerable<string> PasswordValidation(string ch)
+    {
+        if (password is not null && !string.IsNullOrEmpty(ch) && 6 > ch?.Length)
+            yield return "Mindestens 6 Zeichen";
+    }
+    private IEnumerable<string> NameValidation(string ch)
+    {
+        if (!string.IsNullOrEmpty(ch) && PropertiesService.Users.Contains(new UserModel { Name = name }) && ch != PropertiesService.SelectedUser.Name)
+            yield return "Es existiert bereits ein Nutzer mit diesem Namen";
+    }
+}

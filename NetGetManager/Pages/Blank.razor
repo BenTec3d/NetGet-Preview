@@ -1,0 +1,10 @@
+﻿@inject RefreshService RefreshService
+
+@page "/blank"
+
+@code {
+    protected override void OnInitialized()
+    {
+        RefreshService.CallNavMenuRefreshRequested();
+    }
+}

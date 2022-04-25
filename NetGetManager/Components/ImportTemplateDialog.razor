@@ -1,0 +1,239 @@
+﻿@inject RefreshService RefreshService
+@inject PropertiesService PropertiesService
+@inject CrudService CrudService
+@inject NavigationManager NavigationManager
+
+<MudItem Class="d-flex mt-2 mr-6 ml-6 justify-space-between">
+    <MudPaper Width="50%" Class="pr-2" Elevation="0">
+        <MudSelect FullWidth @bind-Value="importTemplate" Variant="Variant.Outlined" Label="Vorlage" T="TemplateModel">
+            @foreach (TemplateModel template in selectableTemplates)
+            {
+                <MudSelectItem Value=template>@template.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </MudPaper>
+    <MudPaper Width="50%" Class="pl-2" Elevation="0">
+        <MudTextField FullWidth ReadOnly Variant="Variant.Outlined" Label="Nutzer" Value="user"></MudTextField>
+    </MudPaper>
+</MudItem>
+
+<MudTable Class="mt-6 mr-6 ml-6" Breakpoint="Breakpoint.None" Height="calc(80vh - 200px)" GroupHeaderStyle="background-color:var(--mud-palette-background-grey)" GroupBy="@groupDefinition" Hover="true" FixedHeader="true" Items="importContent.OrderBy(x => x.Type).Reverse().ToList()" Filter="new Func<ContentModel, bool>(CallFilterFunc)" @ref="mudTable">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Inhalt</MudText>
+        <MudSpacer />
+        <MudTextField Immediate @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentColor="Color.Primary" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </ToolBarContent>
+    <ColGroup>
+        <col style="width:65%;" />
+        <col />
+    </ColGroup>
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<ContentModel, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <GroupHeaderTemplate>
+        @if (context.Key.Equals("winget"))
+        {
+            <MudTh Class="mud-table-cell-custom-group" colspan="2">@($"Apps")</MudTh>
+        }
+        else
+        {
+            <MudTh Class="mud-table-cell-custom-group" colspan="2">@($"Downloads")</MudTh>
+        }
+    </GroupHeaderTemplate>
+    <RowTemplate>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+        @if (context.Type.Equals("winget"))
+        {
+            <MudTd DataLabel="Publisher">@context.Publisher</MudTd>
+        }
+        else
+        {
+            <MudTd DataLabel="User">@context.User</MudTd>
+        }
+    </RowTemplate>
+</MudTable>
+
+<MudItem Class="d-flex mt-6 mb-6 mr-6 ml-6 justify-space-between">
+    <MudPaper Width="50%" Class="pr-2" Elevation="0">
+        <MudButton FullWidth Disabled="!templateSelected" Color="Color.Error" Size="Size.Large" Variant="Variant.Filled" OnClick="() => OverwriteContent()">Inhalte überschreiben</MudButton>
+    </MudPaper>
+    <MudPaper Width="50%" Class="pl-2" Elevation="0">
+        <MudButton FullWidth Disabled="!templateSelected" Color="Color.Primary" Size="Size.Large" Variant="Variant.Filled" OnClick="() => AppendContent()">Inhalte hinzufügen</MudButton>
+    </MudPaper>
+</MudItem>
+
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance MudDialog { get; set; }
+
+    [Parameter]
+    public string Index { get; set; }
+
+    [Parameter]
+    public string Type { get; set; }
+
+    private List<TemplateModel> selectableTemplates
+    {
+        get
+        {
+            if (Type == "group")
+            {
+                return PropertiesService.Templates;
+            }
+            else
+            {
+                return PropertiesService.Templates.Where((x, i) => i != int.Parse(Index)).ToList();
+            }
+        }
+    }
+    private TemplateModel importTemplate;
+    private string user
+    {
+        get
+        {
+            if (importTemplate is null)
+            {
+                return "";
+            }
+            else
+            {
+                return importTemplate.User;
+            }
+        }
+    }
+    private bool templateSelected
+    {
+        get
+        {
+            if (importTemplate is null)
+            {
+                return false;
+            }
+            else
+            {
+                return true;
+            }
+        }
+    }
+    private List<ContentModel> importContent
+    {
+        get
+        {
+            if (importTemplate is null)
+                return new List<ContentModel>();
+            else if (Type == "group")
+                return importTemplate.Content;
+            else
+                return importTemplate.Content.FindAll(x => x.Type == "winget" || (x.User == PropertiesService.Templates.ElementAt(int.Parse(Index)).User || x.User == PropertiesService.RootName));
+        }
+    }
+    private MudTable<ContentModel> mudTable;
+    private string searchString;
+
+    private TableGroupDefinition<ContentModel> groupDefinition = new()
+        {
+            Selector = (x) => x.Type,
+
+        };
+    private bool CallFilterFunc(ContentModel content) => FilterFunc(content, searchString);
+    private bool FilterFunc(ContentModel content, string searchString)
+    {
+
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (content.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (content.Type.Equals("winget"))
+        {
+            if (content.Publisher.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        if (content.Type.Equals("download"))
+        {
+            if (content.User.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private async Task AppendContent()
+    {
+        if (Type == "group")
+            await AddContentToGroup(FilterExistingContentFromImportContent());
+        else
+            await AddContentToTemplate(FilterExistingContentFromImportContent());
+    }
+    private async Task OverwriteContent()
+    {
+        if (Type == "group")
+            await OverwriteGroupContent();
+        else
+            await OverwriteTemplateContent();
+    }
+    private async Task OverwriteGroupContent()
+    {
+        await CrudService.RemoveContentFromGroup(PropertiesService.Groups.ElementAt(int.Parse(Index)), PropertiesService.Groups.ElementAt(int.Parse(Index)).Content);
+        await AddContentToGroup(importContent);
+    }
+    private async Task OverwriteTemplateContent()
+    {
+        await CrudService.RemoveContentFromTemplate(PropertiesService.Templates.ElementAt(int.Parse(Index)).Content, PropertiesService.Templates.ElementAt(int.Parse(Index)));
+        await AddContentToTemplate(importContent);
+    }
+    private List<ContentModel> FilterExistingContentFromImportContent()
+    {
+        List<ContentModel> contentList = new();
+        List<ContentModel> existingContent = new();
+        if (Type == "group")
+            existingContent = PropertiesService.Groups.ElementAt(int.Parse(Index)).Content;
+        else if (Type == "template")
+            existingContent = PropertiesService.Templates.ElementAt(int.Parse(Index)).Content;
+
+        foreach (ContentModel content in importContent.FindAll(x => x.Type == "winget"))
+        {
+            contentList.Add(content);
+
+            foreach (ContentModel content2 in existingContent.FindAll(x => x.Type == "winget"))
+            {
+                if (content.Command == content2.Command)
+                {
+                    contentList.Remove(content);
+                }
+            }
+        }
+        foreach (ContentModel content in importContent.FindAll(x => x.Type == "download"))
+        {
+            contentList.Add(content);
+
+            foreach (ContentModel content2 in existingContent.FindAll(x => x.Type == "download"))
+            {
+                if (content.Id == content2.Id && content.User == content2.User)
+                {
+                    contentList.Remove(content);
+                }
+            }
+        }
+
+        return contentList;
+    }
+    private async Task AddContentToGroup(List<ContentModel> contentList)
+    {
+        await CrudService.AddContentToGroup(contentList, PropertiesService.Groups.ElementAt(int.Parse(Index)));
+        await PropertiesService.RefreshGroups();
+        PropertiesService.ClearSelection();
+        RefreshService.CallContentTableRefreshRequested();
+        RefreshService.CallAvailableContentTableRefreshRequested();
+        MudDialog.Close();
+    }
+    private async Task AddContentToTemplate(List<ContentModel> contentList)
+    {
+        await CrudService.AddContentToTemplate(contentList, PropertiesService.Templates.ElementAt(int.Parse(Index)));
+        await PropertiesService.RefreshTemplates();
+        PropertiesService.ClearSelection();
+        RefreshService.CallContentTableRefreshRequested();
+        RefreshService.CallAvailableContentTableRefreshRequested();
+        MudDialog.Close();
+    }
+}

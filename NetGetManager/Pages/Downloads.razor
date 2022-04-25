@@ -1,0 +1,36 @@
+﻿@inject PropertiesService PropertiesService
+@inject RefreshService RefreshService
+
+@page "/downloads/"
+
+<MudItem Class="d-flex ma-10 justify-space-between">
+    <MudPaper Elevation="2" Width="48%">
+        <DownloadsTable />
+    </MudPaper>
+
+    <MudPaper Elevation="2" Height="1%" Width="48%">
+        @if (PropertiesService.SelectedContent is not null)
+        {
+                <MudText Class="mt-4 ml-4 mr-4 mb-6" Typo="Typo.h6">Download ändern</MudText>
+                <DownloadDetails />
+        }
+        @if (PropertiesService.SelectedContent is null)
+        {
+                <MudText Class="mt-4 ml-4 mr-4 mb-6" Typo="Typo.h6">Download erstellen</MudText>
+                <DownloadCreate />
+        }
+    </MudPaper>
+</MudItem>
+
+@code {
+    protected override void OnInitialized()
+    {
+        RefreshService.CallNavMenuRefreshRequested();
+        RefreshService.ViewRefreshRequested += () => Refesh();
+        PropertiesService.ClearSelection();
+    }
+    private void Refesh()
+    {
+        StateHasChanged();
+    }
+}

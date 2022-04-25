@@ -1,0 +1,158 @@
+﻿@inject RefreshService RefreshService
+@inject PropertiesService PropertiesService
+@inject CrudService CrudService
+
+@if (PropertiesService.SelectedContent is not null)
+{
+    @if (PropertiesService.SelectedContent.Type == "winget")
+    {
+        <MudTextField ReadOnly Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Name" Value="PropertiesService.SelectedContent.Name"></MudTextField>
+        <MudTextField ReadOnly Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Publisher" Value="PropertiesService.SelectedContent.Publisher"></MudTextField>
+        <MudSelect ReadOnly="!PermissionToModify" @bind-Value="version" Class="mt-0 mb-0" Variant="Variant.Outlined" Label="Version" T="string">
+            @if (wingetVersions is not null)
+            {
+                <MudSelectItem T="string" Value="null">Aktuellste Version</MudSelectItem>
+                @foreach (string version in wingetVersions)
+                {
+                    <MudSelectItem Value="version"></MudSelectItem>
+                }
+            }
+        </MudSelect>
+        <MudTextField ReadOnly="!PermissionToModify" Immediate Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Anweisungen" Lines="8" @bind-Value="instructions"></MudTextField>
+    }
+    else if (PropertiesService.SelectedContent.Type == "download")
+    {
+        <MudTextField ReadOnly Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Name" Value="PropertiesService.SelectedContent.Name"></MudTextField>
+        <MudTextField ReadOnly Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Nutzer" Value="PropertiesService.SelectedContent.User"></MudTextField>
+        <MudTextField ReadOnly Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Url" Value="PropertiesService.SelectedContent.Url"></MudTextField>
+        <MudTextField ReadOnly="@(!PermissionToModify || Type == "template")" Immediate Class="mt-4 mb-4" Variant="Variant.Outlined" Label="Anweisungen" Lines="8" @bind-Value="instructions"></MudTextField>
+    }
+
+    <MudPaper Class="mx-auto" Width="60%" Elevation="0">
+        @if (PermissionToModify)
+        {
+            @if (modified)
+            {
+                <MudButton FullWidth Color="Color.Primary" Variant="Variant.Filled" OnClick="() => UpdateContent()">Inhalt aktualisieren</MudButton>
+            }
+            else
+            {
+                <MudButton FullWidth Color="Color.Primary" Variant="Variant.Filled" OnClick="() => RemoveContent()">Inhalt entfernen</MudButton>
+            }
+        }
+    </MudPaper>
+}
+
+@code {
+    [CascadingParameter(Name = "Index")]
+    public string Index { get; set; }
+
+    [CascadingParameter(Name = "Type")]
+    public string Type { get; set; }
+
+    [CascadingParameter(Name = "User")]
+    public string User { get; set; }
+
+    [CascadingParameter(Name = "PermissionToModify")]
+    public bool PermissionToModify { get; set; }
+
+    private string _instructions;
+    private string instructions
+    {
+        get
+        {
+            if (String.IsNullOrEmpty(_instructions))
+                return null;
+            else
+                return _instructions;
+        }
+        set
+        {
+            _instructions = value;
+        }
+    }
+    private string version;
+    private List<string> wingetVersions;
+    private bool modified
+    {
+        get
+        {
+            if ((PropertiesService.SelectedContent.Type == "winget" && PropertiesService.SelectedContent.Version != version) || PropertiesService.SelectedContent.Instructions != instructions)
+                return true;
+            else
+                return false;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        RefreshService.ContentDetailsRefreshRequested += async () => await Refresh();
+        await Refresh();
+    }
+    private async Task Refresh()
+    {
+        if (PropertiesService.SelectedContent.Type == "winget")
+            wingetVersions = await CrudService.ReadWingetVersions(PropertiesService.SelectedContent);
+
+        version = PropertiesService.SelectedContent.Version;
+        instructions = PropertiesService.SelectedContent.Instructions;
+        StateHasChanged();
+    }
+    private async Task UpdateContent()
+    {
+        ContentModel content = new();
+        content.Id = PropertiesService.SelectedContent.Id;
+        content.Type = PropertiesService.SelectedContent.Type;
+        content.Name = PropertiesService.SelectedContent.Name;
+        content.Publisher = PropertiesService.SelectedContent.Publisher;
+        content.Version = version;
+        content.Command = PropertiesService.SelectedContent.Command;
+        content.Url = PropertiesService.SelectedContent.Url;
+        content.User = PropertiesService.SelectedContent.User;
+        if (PropertiesService.SelectedContent.Type == "winget")
+            content.User = User;
+        content.Instructions = instructions;
+
+        if (Type == "group")
+            await UpdateGroupContent(content);
+        else
+            await UpdateTemplateContent(content);
+
+        await Refresh();
+    }
+    private async Task RemoveContent()
+    {
+        if (Type == "group")
+            await RemoveFromGroup();
+        else
+            await RemoveFromTemplate();
+
+        PropertiesService.ClearSelection();
+        RefreshService.CallViewRefreshRequested();
+        RefreshService.CallAvailableContentTableRefreshRequested();
+        RefreshService.CallContentTableRefreshRequested();
+    }
+    private async Task UpdateGroupContent(ContentModel content)
+    {
+        await CrudService.UpdateContent(PropertiesService.Groups.ElementAt(int.Parse(Index)), PropertiesService.SelectedContent, content);
+        await PropertiesService.RefreshGroups();
+        PropertiesService.SelectedContent = await CrudService.FindContent(PropertiesService.Groups.ElementAt(int.Parse(Index)), content);
+    }
+    private async Task UpdateTemplateContent(ContentModel content)
+    {
+        await CrudService.UpdateContent(PropertiesService.SelectedContent, content);
+        await PropertiesService.RefreshTemplates();
+        PropertiesService.SelectedContent = await CrudService.FindContent(content);
+    }
+    private async Task RemoveFromGroup()
+    {
+        await CrudService.RemoveContentFromGroup(PropertiesService.Groups.ElementAt(int.Parse(Index)), PropertiesService.SelectedContent);
+        await PropertiesService.RefreshGroups();
+    }
+    private async Task RemoveFromTemplate()
+    {
+        await CrudService.RemoveContentFromTemplate(PropertiesService.SelectedContent, PropertiesService.Templates.ElementAt(int.Parse(Index)));
+        await PropertiesService.RefreshTemplates();
+    }
+}
+

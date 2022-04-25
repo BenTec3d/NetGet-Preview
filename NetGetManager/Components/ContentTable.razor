@@ -1,0 +1,123 @@
+﻿@inject RefreshService RefreshService
+@inject PropertiesService PropertiesService
+@inject CrudService CrudService
+
+<MudTable Elevation="2" Breakpoint="Breakpoint.None" Height="calc(100vh - 200px)" GroupHeaderStyle="background-color:var(--mud-palette-background-grey)" GroupBy="@groupDefinition" Hover="true" FixedHeader="true" Items="Context.Content.OrderByDescending(x => x.Type).ThenBy(x => x.Name).ToList()" Filter="new Func<ContentModel, bool>(CallFilterFunc)" RowClassFunc="@SelectedRowClassFunc" @ref="mudTable" @bind-SelectedItem="PropertiesService.SelectedContent">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Inhalt</MudText>
+        <MudSpacer />
+        <MudTextField Immediate @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentColor="Color.Primary" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </ToolBarContent>
+    <ColGroup>
+        <col style="width:65%;" />
+        <col />
+    </ColGroup>
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<ContentModel, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <GroupHeaderTemplate>
+        @if (context.Key.Equals("winget"))
+        {
+            <MudTh Class="mud-table-cell-custom-group" colspan="2">@($"Apps")</MudTh>
+        }
+        else
+        {
+            <MudTh Class="mud-table-cell-custom-group" colspan="2">@($"Downloads")</MudTh>
+        }
+    </GroupHeaderTemplate>
+    <RowTemplate>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+        @if (context.Type.Equals("winget"))
+        {
+            <MudTd DataLabel="Publisher">@context.Publisher</MudTd>
+        }
+        else
+        {
+            <MudTd DataLabel="User">@context.User</MudTd>
+        }
+    </RowTemplate>
+</MudTable>
+
+@code {
+    [CascadingParameter(Name = "Index")]
+    public string Index { get; set; }
+
+    [CascadingParameter(Name = "Type")]
+    public string Type { get; set; }
+
+    [CascadingParameter(Name = "User")]
+    public string User { get; set; }
+
+    private GroupModel Context
+    {
+        get
+        {
+            if(Type == "group")
+            {
+                return PropertiesService.Groups.ElementAtOrDefault(int.Parse(Index));
+            }
+            else
+            {
+                return PropertiesService.Templates.ElementAtOrDefault(int.Parse(Index));
+            }
+        }
+    }
+
+    private MudTable<ContentModel> mudTable;
+    private string searchString;
+    private int selectedRowNumber = -1;
+
+    protected override void OnParametersSet()
+    {
+        RefreshService.ContentTableRefreshRequested += () => Refresh();
+    }
+    private void Refresh()
+    {
+        StateHasChanged();
+    }
+
+    private TableGroupDefinition<ContentModel> groupDefinition = new()
+        {
+            Selector = (x) => x.Type,
+
+        };
+
+    private bool CallFilterFunc(ContentModel content) => FilterFunc(content, searchString);
+    private bool FilterFunc(ContentModel content, string searchString)
+    {
+
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (content.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (content.Type.Equals("winget"))
+        {
+            if (content.Publisher.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        if (content.Type.Equals("download"))
+        {
+            if (content.User.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+    private string SelectedRowClassFunc(ContentModel content, int rowNumber)
+    {
+        if (mudTable.SelectedItem != null && mudTable.SelectedItem.Equals(content))
+        {
+            PropertiesService.ClearSelection();
+            PropertiesService.SelectedContent = content;
+            selectedRowNumber = rowNumber;
+            RefreshService.CallViewRefreshRequested();
+            RefreshService.CallContentDetailsRefreshRequested();
+            RefreshService.CallAvailableContentTableRefreshRequested();
+            return "selected";
+        }
+        else
+        {
+            return string.Empty;
+        }
+    }
+}

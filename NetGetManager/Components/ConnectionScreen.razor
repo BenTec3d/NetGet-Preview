@@ -1,0 +1,123 @@
+﻿@using System.ComponentModel
+@using System.Net
+@using System.Xml.Linq
+
+@inject DataAccessMySQL DataAccessMySQL
+@inject DataAccessSQLite DataAccessSQLite
+@inject PropertiesService PropertiesService
+@inject NavigationManager NavigationManager
+@inject DownloadExtractService DownloadExtractService
+
+<MudPaper>
+    <MudProgressLinear Class="mt-8" Rounded Value="downloadProgressPercentage" />
+    <MudProgressLinear Class="mt-8" Rounded Value="extractionProgressPercentage" />
+</MudPaper>
+
+<MudPaper>
+    <MudTextField Class="mt-16" Immediate TextChanged="@(()=>GetDatabases())" T="string" Label="Server" @bind-Value="server" />
+    <MudTextField Class="mt-4" Immediate TextChanged="@(()=>GetDatabases())" T="string" Label="Username" @bind-Value="username" />
+    <MudTextField Class="mt-4" Immediate TextChanged="@(()=>GetDatabases())" T="string" Label="Passwort" InputType="InputType.Password" @bind-Value="password" />
+    <MudSelect Class="mt-4" T="string" Label="Datenbank" AnchorOrigin="Origin.BottomCenter" @bind-Value="database">
+        @foreach (string s in databaseList)
+        {
+            <MudSelectItem Value="s" />
+        }
+    </MudSelect>
+    <MudButton Class="mt-8" Color="Color.Primary" OnClick="Connect" Disabled="@(database == null || database == "" || !wingetDatabaseUpdated)">Verbinden</MudButton>
+</MudPaper>
+
+@code {
+    private XDocument xDoc;
+    private string server;
+    private string username;
+    private string password;
+    private string database;
+    private List<string> databaseList;
+
+    private bool wingetDatabaseUpdated;
+    private DownloadProgressChangedEventHandler progressChangedEventHandler;
+    private AsyncCompletedEventHandler asyncCompletedEventHandler;
+    private double downloadProgressPercentage { get; set; }
+    private double extractionProgressPercentage { get; set; }
+    public Progress<ZipProgress> ZipProgress { get; set; }
+
+
+    protected override void OnInitialized()
+    {
+        LoadLoginDataFromConfig();
+        databaseList = new();
+        progressChangedEventHandler = new(DownloadProgressChanged);
+        asyncCompletedEventHandler = new(DownloadCompleted);
+        ZipProgress = new Progress<ZipProgress>();
+        ZipProgress.ProgressChanged += ExtractionProgressChanged;
+        Task.Run(() => DownloadExtractService.Download("https://winget.azureedge.net/cache/source.msix", Path.Combine(Path.GetTempPath(), "Netget"), "wingetRepo.zip", progressChangedEventHandler, asyncCompletedEventHandler));
+    }
+
+    private async Task Connect()
+    {
+        DataAccessMySQL.Cs = new ConnectionStringMySQL(server, username, password, database);
+        SaveLoginDataToConfig();
+        await PropertiesService.Initialize();
+        NavigationManager.NavigateTo("/blank");
+    }
+    private async Task GetDatabases()
+    {
+        database = null;
+
+        if ((server != null && server != "") && (username != null && username != "") && (password != null && password != ""))
+        {
+            try
+            {
+                databaseList.Clear();
+                DataAccessMySQL.Cs = new ConnectionStringMySQL(server, username, password);
+                string sql = "SHOW DATABASES";
+                databaseList = await DataAccessMySQL.LoadData<string>(sql);
+            }
+            catch
+            {
+
+            }
+        }
+    }
+    private void LoadLoginDataFromConfig()
+    {
+        if (File.Exists(Path.Combine(Path.GetTempPath(), @"Netget\Config.xml")))
+        {
+            xDoc = XDocument.Load(Path.Combine(Path.GetTempPath(), @"Netget\Config.xml"));
+            server = xDoc.Root.Element("server").Value;
+            username = xDoc.Root.Element("username").Value;
+        }
+        else
+        {
+            xDoc = new XDocument(
+                new XElement("config",
+                    new XElement("server", ""),
+                    new XElement("username", "")
+                )
+            );
+        }
+    }
+    private void SaveLoginDataToConfig()
+    {
+        xDoc.Root.Element("server").Value = server;
+        xDoc.Root.Element("username").Value = username;
+        xDoc.Save(Path.Combine(Path.GetTempPath(), @"Netget\Config.xml"));
+    }
+    private void DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
+    {
+        downloadProgressPercentage = e.ProgressPercentage;
+        InvokeAsync(() => StateHasChanged());
+    }
+    private void DownloadCompleted(object sender, AsyncCompletedEventArgs e)
+    {
+        Task.Run(() => DownloadExtractService.Extract(Path.Combine(Path.GetTempPath(), @"Netget/wingetRepo.zip"), Path.Combine(Path.GetTempPath(), @"Netget/wingetRepo"), ZipProgress));
+    }
+    private void ExtractionProgressChanged(object sender, ZipProgress zipProgress)
+    {
+        extractionProgressPercentage = (zipProgress.Processed / zipProgress.Total) * 100;
+        if (zipProgress.Processed == zipProgress.Total)
+            wingetDatabaseUpdated = true;
+        InvokeAsync(() => StateHasChanged());
+    }
+
+}

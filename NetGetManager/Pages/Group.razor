@@ -1,0 +1,126 @@
+﻿@inject RefreshService RefreshService
+@inject PropertiesService PropertiesService
+@inject CrudService CrudService
+@inject NavigationManager NavigationManager
+@inject IDialogService DialogService
+
+@page "/group/{GroupName}"
+
+<CascadingValue Value="index" Name="Index">
+    <CascadingValue Value="@("group")" Name="Type">
+        <CascadingValue Value="PropertiesService.ThisUser.Name" Name="User">
+            <CascadingValue Value="permissionToModify" Name="PermissionToModify">
+
+                <MudItem Class="d-flex ma-10 justify-space-between">
+                    <MudPaper Elevation="0" Width="35%">
+                        <ContentTable />
+                    </MudPaper>
+
+                    <MudPaper Elevation="0" Width="25%">
+                        <MudTextField Disabled="!permissionToModify" Class="mt-4 ml-4 mr-4 mb-4" Label="Gruppenname" MaxLength="50" Immediate Variant="Variant.Outlined" @bind-Value="groupName" Adornment="GetAdornment()" AdornmentColor="Color.Primary" AdornmentIcon="@Icons.Filled.Edit" OnAdornmentClick="() => UpdateGroupName()"></MudTextField>
+
+                        <MudPaper Class="mx-auto" Width="50%" Elevation="0">
+                            <MudButton Disabled="!permissionToModify" FullWidth Color="Color.Default" Variant="Variant.Filled" OnClick="() => ImportTemplate()">Vorlage importieren</MudButton>
+                        </MudPaper>
+
+                        <MudPaper Height="calc(100vh - 200px - 10em)" Class="mt-4 ml-4 mr-4 mb-4 pt-12" Elevation="0">
+                            @if (PropertiesService.SelectedContent is not null)
+                            {
+                                <ContentDetails />
+                            }
+                            else if (PropertiesService.SelectedAvailableContent is not null)
+                            {
+                                <AvailableContentDetails />
+                            }
+                        </MudPaper>
+
+                        <MudPaper Class="mx-auto" Width="50%" Elevation="0">
+                            <MudButton Disabled="!permissionToModify" FullWidth Color="Color.Error" Variant="Variant.Filled" OnClick="() => DeleteGroup()">Gruppe Löschen</MudButton>
+                        </MudPaper>
+
+                    </MudPaper>
+
+                    @if (permissionToModify)
+                    {
+                        <MudPaper Elevation="0" Width="35%">
+                            <AvailableContentTable />
+                        </MudPaper>
+                    }
+                    else
+                    {
+                        <MudPaper Elevation="0" Width="35%">
+                        </MudPaper>
+                    }
+                </MudItem>
+            </CascadingValue>
+        </CascadingValue>
+    </CascadingValue>
+</CascadingValue>
+
+@code {
+    [Parameter]
+    public string GroupName { get; set; }
+    private string groupName;
+    private GroupModel group;
+    private string index;
+    private bool permissionToModify = true;
+
+    protected override void OnParametersSet()
+    {
+        PropertiesService.ClearSelection();
+        RefreshService.CallNavMenuRefreshRequested();
+        RefreshService.CallAvailableContentTableRefreshRequested();
+        RefreshService.CallContentTableRefreshRequested();
+
+        RefreshService.ViewRefreshRequested += () => Refresh();
+
+        group = PropertiesService.Groups.Find(x => x.Name == GroupName);
+        index = $"{PropertiesService.Groups.FindIndex(x => x.Name == GroupName)}";
+        groupName = GroupName;
+    }
+    private void Refresh()
+    {
+        StateHasChanged();
+    }
+    private async void UpdateGroupName()
+    {
+        if (group.Name != groupName && groupName.Length > 0 && !groupName.Contains("_group"))
+        {
+            await CrudService.UpdateGroup(group, groupName);
+            await PropertiesService.RefreshGroups();
+            NavigationManager.NavigateTo($"/group/{groupName}");
+        }
+    }
+    private async void DeleteGroup()
+    {
+        NavigationManager.NavigateTo("/blank");
+        await CrudService.DeleteGroup(group, PropertiesService.Users.Where(x => x.Type == "client"));
+        await PropertiesService.RefreshGroups();
+        RefreshService.CallNavMenuRefreshRequested();
+    }
+    private void ImportTemplate()
+    {
+        var parameters = new DialogParameters { ["Index"] = index, ["Type"] = "group" };
+        var options = new DialogOptions
+            {
+                CloseButton = true,
+                Position = DialogPosition.Center,
+                CloseOnEscapeKey = true,
+                FullWidth = true
+            };
+        DialogService.Show<ImportTemplateDialog>("Vorlage importieren", parameters, options);
+    }
+    private Adornment GetAdornment()
+    {
+        if (groupName.Length == 0)
+            return Adornment.None;
+        else if (group.Name == groupName)
+            return Adornment.None;
+        else if (groupName.Contains("_group"))
+            return Adornment.None;
+        else if (PropertiesService.Groups.Contains(new GroupModel(groupName)))
+            return Adornment.None;
+        else
+            return Adornment.End;
+    }
+}

@@ -1,0 +1,87 @@
+﻿@inject RefreshService RefreshService
+@inject DataAccessMySQL DataAccess
+@inject PropertiesService PropertiesService
+@inject NavigationManager NavigationManager
+@inject IconColorService IconColorService
+
+<MudNavMenu Rounded Class="pa-2" Margin="Margin.Normal">
+    @*GROUPS*@
+    <MudNavGroup DisableRipple Icon="@IconColorService.GetFolderIcon(groupsExpanded)" IconColor="@GetIconColor("/group/", false)" Title="Gruppen" @bind-Expanded="@groupsExpanded">
+        @foreach(GroupModel group in PropertiesService.Groups)
+        {
+            <MudNavLink DisableRipple Icon="@Icons.Outlined.FeaturedPlayList" IconColor="@GetIconColor($"/group/{group.Name}", true)" Href="@($"/group/{group.Name}")" Match="NavLinkMatch.All">@group.Name</MudNavLink>
+        }
+        <MudNavLink DisableRipple Icon="@Icons.Filled.AddCircleOutline" IconColor="@GetIconColor($"/group/create", true)" Href="@($"/group/create")" Match="NavLinkMatch.All">Erstellen</MudNavLink>
+    </MudNavGroup>
+
+    @*TEMPLATES*@
+    <MudNavGroup DisableRipple Icon="@IconColorService.GetFolderIcon(templatesExpanded)" IconColor="@GetIconColor("/template/", false)" Title="Vorlagen" @bind-Expanded="@templatesExpanded">
+        @*ThisUser*@
+        <MudNavGroup DisableRipple Icon="@IconColorService.GetFolderIcon(UserTemplatesExpandedDict[PropertiesService.ThisUser.Name])" IconColor="@GetIconColor($"/template/{PropertiesService.ThisUser.Name}/", false)" Title="@PropertiesService.ThisUser.Name" @bind-Expanded="@UserTemplatesExpandedDict[PropertiesService.ThisUser.Name]">
+            @*Templates from ThisUser*@
+            @foreach (TemplateModel template in PropertiesService.Templates.Where(x => x.User == PropertiesService.ThisUser.Name))
+            {
+                <MudNavLink DisableRipple Icon="@Icons.Outlined.FeaturedPlayList" IconColor="@GetIconColor($"/template/{PropertiesService.ThisUser.Name}/{PropertiesService.Templates.IndexOf(template)}", true)" Href="@($"/template/{PropertiesService.ThisUser.Name}/{PropertiesService.Templates.IndexOf(template)}")" Match="NavLinkMatch.All">@template.Name</MudNavLink>
+            }
+            @*Create template button*@
+            <MudNavLink DisableRipple Icon="@Icons.Filled.AddCircleOutline" IconColor="@GetIconColor($"/template/{PropertiesService.ThisUser.Name}/create", true)" Href="@($"/template/{PropertiesService.ThisUser.Name}/create")" Match="NavLinkMatch.All">Erstellen</MudNavLink>
+        </MudNavGroup>
+        @*Other users*@
+        @foreach (UserModel user in PropertiesService.Users.Where(x => x.Name != PropertiesService.ThisUser.Name))
+        {
+            <MudNavGroup DisableRipple Icon="@IconColorService.GetFolderIcon(UserTemplatesExpandedDict[user.Name])" IconColor="@GetIconColor($"/template/{user.Name}/", false)" Title="@user.Name" @bind-Expanded="@UserTemplatesExpandedDict[user.Name]">
+                @*Templates from other users*@
+                @foreach (TemplateModel template in PropertiesService.Templates.Where(x => x.User == user.Name))
+                {
+                    <MudNavLink DisableRipple Icon="@Icons.Outlined.FeaturedPlayList" IconColor="@GetIconColor($"/template/{user.Name}/{PropertiesService.Templates.IndexOf(template)}", true)" Href="@($"/template/{user.Name}/{PropertiesService.Templates.IndexOf(template)}")" Match="NavLinkMatch.All">@template.Name</MudNavLink>
+                }
+                @*Create template button*@
+                @if (user.Type != "admin" || PropertiesService.ThisUser.Type == "root")
+                {
+                    <MudNavLink DisableRipple Icon="@Icons.Filled.AddCircleOutline" IconColor="@GetIconColor($"/template/{user.Name}/create", true)" Href="@($"/template/{user.Name}/create")" Match="NavLinkMatch.All">Erstellen</MudNavLink>
+                }
+            </MudNavGroup>
+        }
+    </MudNavGroup>
+
+    @*DOWNLOADS*@
+    <MudNavLink DisableRipple Icon="@Icons.Rounded.Download" IconColor="@GetIconColor($"/downloads/")" Href="@($"/downloads/")">Downloads</MudNavLink>
+
+    @*USERS*@
+    <MudNavLink DisableRipple Icon="@Icons.Filled.Person" IconColor="@GetIconColor($"/users/")" Href="@($"/users/")">Nutzer</MudNavLink>
+
+</MudNavMenu>
+
+@code
+{
+    private bool groupsExpanded;
+    private bool templatesExpanded;
+    private Dictionary<string, bool> UserTemplatesExpandedDict;
+
+    protected override void OnInitialized()
+    {
+        UserTemplatesExpandedDict = new();
+        RefreshUsersTemplatesExpanded();
+        RefreshService.NavMenuRefreshRequested += () => Refresh();
+    }
+    private void Refresh()
+    {
+        RefreshUsersTemplatesExpanded();
+        StateHasChanged();
+    }
+    private MudBlazor.Color GetIconColor(string href, bool exactMatch)
+    {
+        return IconColorService.GetIconColor(href, NavigationManager.Uri, exactMatch);
+    }
+    private MudBlazor.Color GetIconColor(string href)
+    {
+        return IconColorService.GetIconColor(href, NavigationManager.Uri);
+    }
+    private void RefreshUsersTemplatesExpanded()
+    {
+        foreach (UserModel user in PropertiesService.Users)
+        {
+            UserTemplatesExpandedDict[user.Name] = UserTemplatesExpandedDict.GetValueOrDefault(user.Name, false);
+        }
+    }
+}

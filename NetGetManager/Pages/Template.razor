@@ -1,0 +1,147 @@
+﻿@inject RefreshService RefreshService
+@inject PropertiesService PropertiesService
+@inject CrudService CrudService
+@inject NavigationManager NavigationManager
+@inject IDialogService DialogService
+
+@page "/template/{User}/{TemplateIndex}"
+
+<CascadingValue Value="TemplateIndex" Name="Index">
+    <CascadingValue Value="@("template")" Name="Type">
+        <CascadingValue Value="User" Name="User">
+            <CascadingValue Value="permissionToModify" Name="PermissionToModify">
+
+                <MudItem Class="d-flex ma-10 justify-space-between">
+                    <MudPaper Elevation="0" Width="35%">
+                        <ContentTable />
+                    </MudPaper>
+
+                    <MudPaper Elevation="0" Width="25%">
+                        <MudTextField Disabled="!permissionToModify" Class="mt-4 ml-4 mr-4 mb-4" Label="Vorlagenname" MaxLength="50" Immediate Variant="Variant.Outlined" @bind-Value="templateName" Adornment="GetAdornment()" AdornmentColor="Color.Primary" AdornmentIcon="@Icons.Filled.Edit" OnAdornmentClick="() => UpdateTemplateName()"></MudTextField>
+
+                        <MudPaper Class="mx-auto" Width="50%" Elevation="0">
+                            <MudButton Disabled="!permissionToModify" FullWidth Color="Color.Default" Variant="Variant.Filled" OnClick="() => ImportTemplate()">Vorlage importieren</MudButton>
+                        </MudPaper>
+
+                        <MudPaper Height="calc(100vh - 200px - 10em)" Class="mt-4 ml-4 mr-4 mb-4 pt-12" Elevation="0">
+                            @if (PropertiesService.SelectedContent is not null)
+                            {
+                                <ContentDetails />
+                            }
+                            else if (PropertiesService.SelectedAvailableContent is not null)
+                            {
+                                <AvailableContentDetails />
+                            }
+                        </MudPaper>
+
+                        <MudPaper Class="mx-auto" Width="50%" Elevation="0">
+                            <MudButton Disabled="!permissionToModify" FullWidth Color="Color.Error" Variant="Variant.Filled" OnClick="() => DeleteTemplate()">Vorlage Löschen</MudButton>
+                        </MudPaper>
+
+                    </MudPaper>
+
+                    @if (permissionToModify)
+                    {
+                        <MudPaper Elevation="0" Width="35%">
+                            <AvailableContentTable />
+                        </MudPaper>
+                    }
+                    else
+                    {
+                        <MudPaper Elevation="0" Width="35%">
+                        </MudPaper>
+                    }
+                </MudItem>
+            </CascadingValue>
+        </CascadingValue>
+    </CascadingValue>
+</CascadingValue>
+
+@code {
+    [Parameter]
+    public string TemplateIndex { get; set; }
+    [Parameter]
+    public string User { get; set; }
+
+    private TemplateModel template;
+    private string templateName;
+    private bool permissionToModify
+    {
+        get
+        {
+            if (PropertiesService.ThisUser.Type == "root" || (PropertiesService.ThisUser.Type == "admin" && PropertiesService.Users.Find(x => x.Name == template.User).Type != "admin") || PropertiesService.ThisUser.Name == template.User)
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        PropertiesService.ClearSelection();
+        RefreshService.CallNavMenuRefreshRequested();
+        RefreshService.CallAvailableContentTableRefreshRequested();
+        RefreshService.CallContentTableRefreshRequested();
+
+        RefreshService.ViewRefreshRequested += () => Refresh();
+
+        template = PropertiesService.Templates.ElementAt(int.Parse(TemplateIndex));
+        templateName = template.Name;
+    }
+    private void Refresh()
+    {
+        StateHasChanged();
+    }
+    private async void UpdateTemplateName()
+    {
+        if (template.Name != templateName && templateName.Length > 0)
+        {
+            await CrudService.UpdateTemplate(template, templateName);
+            await PropertiesService.RefreshTemplates();
+            NavigationManager.NavigateTo($"/template/{template.User}/{PropertiesService.Templates.FindIndex(x => x.Id == template.Id && x.User == template.User)}");
+            OnParametersSet();
+            RefreshService.CallNavMenuRefreshRequested();
+            RefreshService.CallViewRefreshRequested();
+        }
+    }
+    private async void DeleteTemplate()
+    {
+        NavigationManager.NavigateTo("/blank");
+        await CrudService.DeleteTemplate(template);
+        await PropertiesService.RefreshTemplates();
+        RefreshService.CallNavMenuRefreshRequested();
+    }
+    private void ImportTemplate()
+    {
+        var parameters = new DialogParameters { ["Index"] = TemplateIndex, ["Type"] = "template" };
+        var options = new DialogOptions
+            {
+                CloseButton = true,
+                Position = DialogPosition.Center,
+                CloseOnEscapeKey = true,
+                FullWidth = true
+            };
+        DialogService.Show<ImportTemplateDialog>("Vorlage importieren", parameters, options);
+    }
+    private Adornment GetAdornment()
+    {
+        if (templateName.Length == 0)
+        {
+            return Adornment.None;
+        }
+        else if (template.Name == templateName)
+        {
+            return Adornment.None;
+        }
+        else
+        {
+            return Adornment.End;
+        }
+    }
+
+}

@@ -1,0 +1,87 @@
+﻿@inject RefreshService RefreshService
+@inject PropertiesService PropertiesService
+@inject CrudService CrudService
+
+<MudForm @bind-IsValid="@valid">
+    <MudTextField Required Immediate Class="mt-4 ml-4 mr-4" Label="Name" MaxLength="16" Validation="@(new Func<string, IEnumerable<string>>(NameValidation))" Variant="Variant.Outlined" @bind-Value="name" />
+    <MudTextField Required Immediate Class="mt-4 ml-4 mr-4" Label="Passwort" Validation="@(new Func<string, IEnumerable<string>>(PasswordValidation))" Variant="Variant.Outlined" @bind-Value="password" />
+    <MudSelect Required Class="mt-4 ml-4 mr-4" Label="Zugangsberechtigung" AnchorOrigin="Origin.BottomCenter" Variant="Variant.Outlined" @bind-Value="typeLabel">
+        @if (PropertiesService.ThisUser.Type == "root")
+        {
+            <MudSelectItem Value="@("Admin")" />
+        }
+        <MudSelectItem Value="@("Kurator")" />
+        <MudSelectItem Value="@("Client")" />
+    </MudSelect>
+</MudForm>
+
+<MudItem Class="ma-4">
+    <MudPaper Elevation="0" Width="25%">
+        <MudButton FullWidth StartIcon="@Icons.Filled.PersonAdd" IconColor="Color.Dark" Color="Color.Primary" Variant="Variant.Filled" Disabled="@(!valid)" OnClick="() => CreateUser()">Erstellen</MudButton>
+    </MudPaper>
+</MudItem>
+
+
+@code {
+
+    private string name;
+    private string password;
+    private string type;
+    private string typeLabel
+    {
+        get
+        {
+            switch (type)
+            {
+                case "root":
+                    return "Root";
+                case "admin":
+                    return "Admin";
+                case "curator":
+                    return "Kurator";
+                case "client":
+                    return "Client";
+                default:
+                    return "";
+            }
+        }
+        set
+        {
+            switch (value)
+            {
+                case "Root":
+                    type = "root";
+                    break;
+                case "Admin":
+                    type = "admin";
+                    break;
+                case "Kurator":
+                    type = "curator";
+                    break;
+                case "Client":
+                    type = "client";
+                    break;
+            }
+        }
+    }
+    private bool valid;
+
+    private async void CreateUser()
+    {
+        await CrudService.CreateUser(name, password, type, PropertiesService.RootName);
+        await PropertiesService.RefreshUsers();
+        PropertiesService.SelectedUser = PropertiesService.Users.Find(x => x.Name == name);
+        RefreshService.CallUsersTableRefreshRequested();
+        RefreshService.CallViewRefreshRequested();
+    }
+    private IEnumerable<string> PasswordValidation(string ch)
+    {
+        if (!string.IsNullOrEmpty(ch) && 6 > ch?.Length)
+            yield return "Mindestens 6 Zeichen";
+    }
+    private IEnumerable<string> NameValidation(string ch)
+    {
+        if (!string.IsNullOrEmpty(ch) && PropertiesService.Users.Contains(new UserModel { Name = name }))
+            yield return "Es existiert bereits ein Nutzer mit diesem Namen";
+    }
+}

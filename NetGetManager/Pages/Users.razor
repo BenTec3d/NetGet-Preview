@@ -1,0 +1,45 @@
+﻿@inject PropertiesService PropertiesService
+@inject RefreshService RefreshService
+
+@page "/users/"
+
+<MudItem Class="d-flex ma-10 justify-space-between">
+    <MudPaper Elevation="2" Width="48%">
+        <UsersTable />
+    </MudPaper>
+
+    <MudPaper Class="d-flex flex-column justify-space-between" Elevation="0" Width="48%">
+        <MudPaper Elevation="2">
+            @if (PropertiesService.SelectedUser is not null)
+            {
+                <MudText Class="mt-4 ml-4 mr-4 mb-6" Typo="Typo.h6">Nutzer ändern</MudText>
+                <UserDetails />
+            }
+            @if (PropertiesService.SelectedUser is null)
+            {
+                <MudText Class="mt-4 ml-4 mr-4 mb-6" Typo="Typo.h6">Nutzer erstellen</MudText>
+                <UserCreate />
+            }
+        </MudPaper>
+
+        @if (PropertiesService.SelectedUser is not null && PropertiesService.SelectedUser.Type == "curator")
+        {
+            <MudPaper Class="mt-4" Elevation="0" >
+                <UserAssignGroups />
+            </MudPaper>
+        }
+    </MudPaper>
+</MudItem>
+
+@code {
+    protected override void OnInitialized()
+    {
+        RefreshService.CallNavMenuRefreshRequested();
+        RefreshService.ViewRefreshRequested += () => Refesh();
+        PropertiesService.ClearSelection();
+    }
+    private void Refesh()
+    {
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,79 @@
+﻿@inject PropertiesService PropertiesService
+@inject RefreshService RefreshService
+
+<MudTable Breakpoint="Breakpoint.None" Height="calc(100vh - 200px - 3em)" Hover="true" FixedHeader="true" Items="PropertiesService.Downloads" Filter="new Func<ContentModel, bool>(CallFilterFunc)" RowClassFunc="@SelectedRowClassFunc" @ref="mudTable" @bind-SelectedItem="PropertiesService.SelectedContent">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Downloads</MudText>
+        <MudSpacer />
+        <MudTextField Immediate @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentColor="Color.Primary" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </ToolBarContent>
+    <ColGroup>
+        <col style="width:65%;" />
+        <col />
+    </ColGroup>
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<ContentModel, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+        <MudTh><MudTableSortLabel SortBy="new Func<ContentModel, object>(x => x.User)">Nutzer</MudTableSortLabel></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+        <MudTd DataLabel="User">@context.User</MudTd>
+    </RowTemplate>
+    <PagerContent>
+        <MudButton OnClick="ClearSelection" Variant="Variant.Filled" FullWidth="true" Size="Size.Large">Neuer Download</MudButton>
+    </PagerContent>
+</MudTable>
+
+@code {
+    private MudTable<ContentModel> mudTable;
+    private string searchString;
+    private int selectedRowNumber = -1;
+
+    protected override void OnInitialized()
+    {
+        RefreshService.DownloadsTableRefreshRequested += () => Refresh();
+    }
+
+    void Refresh()
+    {
+        StateHasChanged();
+    }
+
+    private bool CallFilterFunc(ContentModel download) => FilterFunc(download, searchString);
+
+    private void ClearSelection()
+    {
+        PropertiesService.ClearSelection();
+        RefreshService.CallViewRefreshRequested();
+    }
+
+    private bool FilterFunc(ContentModel download, string searchString)
+    {
+        {
+            if (string.IsNullOrWhiteSpace(searchString))
+                return true;
+            if (download.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (download.User.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (download.Url.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private string SelectedRowClassFunc(ContentModel download, int rowNumber)
+    {
+        if (mudTable.SelectedItem != null && mudTable.SelectedItem.Equals(download))
+        {
+            selectedRowNumber = rowNumber;
+            RefreshService.CallViewRefreshRequested();
+            RefreshService.CallDownloadDetailsRefreshRequested();
+            return "selected";
+        }
+        else
+        {
+            return string.Empty;
+        }
+    }
+}

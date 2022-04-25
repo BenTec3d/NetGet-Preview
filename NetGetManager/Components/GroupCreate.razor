@@ -1,0 +1,51 @@
+﻿@inject RefreshService RefreshService
+@inject PropertiesService PropertiesService
+@inject CrudService CrudService
+@inject NavigationManager NavigationManager
+
+@page "/group/create"
+
+<MudItem Class="d-flex ma-10 justify-space-between">
+    <MudPaper Elevation="0" Width="35%">
+    </MudPaper>
+
+    <MudPaper Elevation="0" Width="25%">
+        <MudTextField Class="mt-4 ml-4 mr-4 mb-4" Label="Gruppenname" MaxLength="50" Immediate Variant="Variant.Outlined" @bind-Value="groupName" Adornment="GetAdornment()" AdornmentColor="Color.Primary" AdornmentIcon="@Icons.Filled.Add" OnAdornmentClick="@(() => CreateGroup())"></MudTextField>
+    </MudPaper>
+
+    <MudPaper Elevation="0" Width="35%">
+    </MudPaper>
+
+</MudItem>
+
+@code {
+
+    private string groupName;
+
+    protected override void OnParametersSet()
+    {
+        RefreshService.CallNavMenuRefreshRequested();
+    }
+    private async void CreateGroup()
+    {
+        if (groupName.Length > 0 && !groupName.Contains("_group") && !PropertiesService.Groups.Contains(new GroupModel(groupName)) && (PropertiesService.ThisUser.Type == "root" || PropertiesService.ThisUser.Type == "admin"))
+        {
+            await CrudService.CreateGroup(groupName);
+            await PropertiesService.RefreshGroups();
+            NavigationManager.NavigateTo($"/group/{groupName}");
+        }
+    }
+    public Adornment GetAdornment()
+    {
+        if (groupName is null)
+            return Adornment.None;
+        else if (groupName.Length == 0)
+            return Adornment.None;
+        else if (groupName.Contains("_group"))
+            return Adornment.None;
+        else if (PropertiesService.Groups.Contains(new GroupModel(groupName)))
+            return Adornment.None;
+        else
+            return Adornment.End;
+    }
+}

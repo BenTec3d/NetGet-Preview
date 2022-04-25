@@ -1,0 +1,175 @@
+﻿@inject PropertiesService PropertiesService
+@inject RefreshService RefreshService
+@inject NavigationManager NavigationManager
+@inject IconColorService IconColorService
+
+<MudTable Elevation="2" Virtualize="true" Breakpoint="Breakpoint.None" Height="calc(100vh - 200px)" Hover="true" FixedHeader="true" Items="AvailableContent.OrderBy(x => x.Name).ToList()" Filter="new Func<ContentModel, bool>(CallFilterFunc)" RowClassFunc="@SelectedRowClassFunc" @ref="mudTable" @bind-SelectedItem="PropertiesService.SelectedAvailableContent">
+    <ToolBarContent>
+        <MudHidden Breakpoint="Breakpoint.MdAndDown">
+            <MudButton DisableRipple Class="mr-3" Size="Size.Large" OnClick="() => SwitchValue(false)" Color="GetTextColor(!switchValue)">Apps</MudButton>
+        </MudHidden>
+        <MudSwitch Class="ml-0, mr-0" @onclick="() => SwitchValue(!switchValue)" Checked="switchValue" />
+        <MudHidden Breakpoint="Breakpoint.LgAndDown">
+            <MudButton DisableRipple Size="Size.Large" OnClick="() => SwitchValue(true)" Color="GetTextColor(switchValue)">Downloads</MudButton>
+        </MudHidden>
+        <MudHidden Breakpoint="Breakpoint.Lg" Invert>
+            <MudButton DisableRipple Size="Size.Large" OnClick="() => SwitchValue(true)" Color="GetTextColor(switchValue)">D/L</MudButton>
+        </MudHidden>
+        <MudSpacer />
+        <MudTextField Immediate @bind-Value="searchString" Placeholder="Search" Adornment="Adornment.Start" AdornmentColor="Color.Primary" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+    </ToolBarContent>
+    <ColGroup>
+        <col style="width:65%;" />
+        <col />
+    </ColGroup>
+    <HeaderContent>
+        <MudTh><MudTableSortLabel SortBy="new Func<ContentModel, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+        @if (!switchValue)
+        {
+            <MudTh><MudTableSortLabel SortBy="new Func<ContentModel, object>(x => x.Publisher)">Publisher</MudTableSortLabel></MudTh>
+        }
+        else
+        {
+            <MudTh><MudTableSortLabel SortBy="new Func<ContentModel, object>(x => x.User)">User</MudTableSortLabel></MudTh>
+        }
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+        @if (!switchValue)
+        {
+            <MudTd DataLabel="Publisher">@context.Publisher</MudTd>
+        }
+        else
+        {
+            <MudTd DataLabel="User">@context.User</MudTd>
+        }
+    </RowTemplate>
+</MudTable>
+
+@code {
+    [CascadingParameter(Name = "Index")]
+    public string Index { get; set; }
+
+    [CascadingParameter(Name = "Type")]
+    public string Type { get; set; }
+
+    [CascadingParameter(Name = "User")]
+    public string User { get; set; }
+
+    private GroupModel Context
+    {
+        get
+        {
+            if (Type == "group")
+            {
+                return PropertiesService.Groups.ElementAt(int.Parse(Index));
+            }
+            else
+            {
+                return PropertiesService.Templates.ElementAt(int.Parse(Index));
+            }
+        }
+    }
+    private List<ContentModel> AvailableContent
+    {
+        get
+        {
+            List<ContentModel> contentList = new();
+            if (!switchValue)
+            {
+                foreach (ContentModel content in PropertiesService.Wingets)
+                {
+                    contentList.Add(content);
+
+                    foreach (ContentModel content2 in Context.Content.FindAll(x => x.Type == "winget"))
+                    {
+                        if (content.Id == content2.Command)
+                        {
+                            contentList.Remove(content);
+                        }
+                    }
+
+                }
+            }
+            else
+            {
+                foreach (ContentModel content in PropertiesService.Downloads.FindAll(x => x.User == User || x.User == PropertiesService.RootName))
+                {
+                    contentList.Add(content);
+
+                    foreach (ContentModel content2 in Context.Content.FindAll(x => x.Type == "download"))
+                    {
+                        if (content.Name == content2.Name && content.User == content2.User && content.Url == content2.Url)
+                        {
+                            contentList.Remove(content);
+                        }
+                    }
+                }
+            }
+            return contentList;
+        }
+    }
+
+    private MudTable<ContentModel> mudTable;
+    private bool switchValue;
+    private string searchString;
+    private int selectedRowNumber = -1;
+
+    protected override void OnParametersSet()
+    {
+        RefreshService.AvailableContentTableRefreshRequested += () => Refresh();
+    }
+    private void Refresh()
+    {
+        StateHasChanged();
+    }
+
+    private Color GetTextColor(bool switchValue)
+    {
+        return IconColorService.GetTextColor(switchValue);
+    }
+    private void SwitchValue(bool value)
+    {
+        if (switchValue != value)
+        {
+            switchValue = value;
+            PropertiesService.ClearSelection();
+            RefreshService.CallViewRefreshRequested();
+        }
+    }
+    private bool CallFilterFunc(ContentModel content) => FilterFunc(content, searchString);
+    private bool FilterFunc(ContentModel content, string searchString)
+    {
+
+        if (string.IsNullOrWhiteSpace(searchString))
+            return true;
+        if (content.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (!switchValue)
+        {
+            if (content.Publisher.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        else
+        if (content.User.Contains(searchString, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+    private string SelectedRowClassFunc(ContentModel content, int rowNumber)
+    {
+        if (mudTable.SelectedItem != null && mudTable.SelectedItem.Equals(content))
+        {
+            PropertiesService.ClearSelection();
+            PropertiesService.SelectedAvailableContent = content;
+            selectedRowNumber = rowNumber;
+            RefreshService.CallViewRefreshRequested();
+            RefreshService.CallAvailableContentDetailsRefreshRequested();
+            RefreshService.CallContentTableRefreshRequested();
+            return "selected";
+        }
+        else
+        {
+            return string.Empty;
+        }
+    }
+}
